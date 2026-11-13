@@ -191,7 +191,7 @@ expect
 			\\An example CLI.
 			\\
 			\\Usage:
-			\\  example -a/--alpha NUM [options]
+			\\  example [options]
 			\\
 			\\Options:
 			\\  -v                   How verbose our logs should be.
@@ -212,7 +212,7 @@ expect
 			\\Error: The argument -x was not recognized.
 			\\
 			\\Usage:
-			\\  example -a/--alpha NUM [options]
+			\\  example [options]
 		)
 
 expect
@@ -221,7 +221,7 @@ expect
 			\\Error: The parameter "extra" was not expected.
 			\\
 			\\Usage:
-			\\  example -a/--alpha NUM [options]
+			\\  example [options]
 		)
 
 # Help is shown even when the rest of the arguments are wrong.
@@ -283,9 +283,26 @@ expect {
 		\\  example [options]
 		\\
 		\\Options:
-		\\  -f             Force it.
-		\\  -h, --help     Show this help page.
-		\\  -V, --version  Show the version.
+		\\  -f          Force it.
+		\\  -h, --help  Show this help page.
+}
+
+# The usage line names the options that have to be given, and leaves out
+# the ones that may be left out.
+expect {
+	optional_cli =
+		{
+			alpha: Opt.u64({ short: "a", long: "alpha" }),
+			beta: Opt.maybe_str({ long: "beta" }),
+			gamma: Opt.str_list({ long: "gamma" }),
+		}.Cli
+			.finish({ name: "example", text_style: Plain })
+			|> Cli.assert_valid
+
+	Help.usage_help(optional_cli.config, ["example"], Plain)
+		==
+		\\Usage:
+		\\  example -a/--alpha NUM [options]
 }
 
 # Help text that runs over several lines stays in its column.
@@ -295,7 +312,7 @@ expect {
 			.finish({ name: "example", text_style: Plain })
 			|> Cli.assert_valid
 
-	Help.help_text(multiline_cli.config, ["example"], Plain).contains("  -f             Force it.\n                 Even when it is a bad idea.\n")
+	Help.help_text(multiline_cli.config, ["example"], Plain).contains("  -f          Force it.\n              Even when it is a bad idea.\n")
 }
 
 # The messages of a CLI that fails validation.
@@ -331,7 +348,19 @@ expect
 
 expect validation_message(Opt.flag({ short: "h" }).finish({ name: "example" })) == "The option '-h' tried to overwrite the built-in -h/--help flag."
 
-expect validation_message(Opt.flag({ long: "version" }).finish({ name: "example" })) == "The option '--version' tried to overwrite the built-in -V/--version flag."
+expect validation_message(Opt.flag({ long: "version" }).finish({ name: "example", version: "v1.0.0" })) == "The option '--version' tried to overwrite the built-in -V/--version flag."
+
+# A CLI without a version has no -V/--version, so an option may take the name.
+expect validation_message(Opt.flag({ long: "version" }).finish({ name: "example" })) == "valid"
+
+expect {
+	version_cli =
+		Opt.str({ long: "version" })
+			.finish({ name: "example", text_style: Plain })
+			|> Cli.assert_valid
+
+	parse(version_cli, ["--version", "1.2.3"]) == Ok("1.2.3") and parse(version_cli, ["-V"]).is_err()
+}
 
 expect {
 	sub =

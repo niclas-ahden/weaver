@@ -26,7 +26,7 @@ from another CLI parsing library that you think would fit well in Weaver's nest.
 ```roc
 app [main!] {
 	pf: platform "https://github.com/niclas-ahden/basic-cli/releases/download/0.31.0/Ff3fkK1TjYTVxMj9V21FP24ojTJXYk314Fbo1whBZ6Yf.tar.zst",
-	weaver: "https://github.com/niclas-ahden/weaver/releases/download/0.7.0/3sdZgJWYtJjxpDCB9XGJqKRC1XpX7ULAedqXT5AgvuJD.tar.zst",
+	weaver: "https://github.com/niclas-ahden/weaver/releases/download/0.7.1/EyDiT4HEfS5wS5VpyaSJyC4XZHuBM9Bc8g9d1csgQ2pt.tar.zst",
 }
 
 import pf.Stdout
@@ -134,6 +134,10 @@ Behaviour that changed:
   until the compiler could handle it.
 - Flags that share a short group, as in `-vf`, are all found. Upstream Weaver lost the rest of the
   group once it found the first option in it.
+- A CLI finished without a `version` has no `-V/--version`, so one of its own options may be
+  called `--version`. A CLI with a version keeps the flag, and so do subcommands.
+- The usage line names only the options that have to be given. Upstream Weaver listed every
+  option that takes a value there, optional and list options included.
 
 ## Tests
 

@@ -114,9 +114,11 @@ Help :: [].{
 
 		name = Str.join_with(subcommand_path, " ")
 
+		# An option is required when it takes a value and has to be given once.
+		# Opt.maybe and the list options may be left out.
 		required_options =
 			config.options
-				.drop_if(|opt| opt.expected_value == NothingExpected)
+				.keep_if(|opt| opt.expected_value != NothingExpected and opt.plurality == One)
 				.map(option_simple_name_formatter)
 
 		other_options =

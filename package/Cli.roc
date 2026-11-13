@@ -289,9 +289,11 @@ Cli(data, _from_action, _to_action) :: {
 	## ```
 	finish_without_validating : Cli(data, from_action, to_action), Base.CliConfigParams -> CliParser(data)
 	finish_without_validating = |builder, { name, authors, version, description, text_style }| {
+		# A CLI without a version has no -V/--version, which leaves the name
+		# free for an option of its own.
+		version_text = version ?? ""
 		{ options, parameters, subcommands, parser } =
-			builder
-				.check_for_help_and_version()
+			check_for_flags(builder, version_text != "")
 				.update_parser(
 					|data| {
 						ensure_all_args_were_parsed(data.remaining_args)?
@@ -303,7 +305,7 @@ Cli(data, _from_action, _to_action) :: {
 		config = {
 			name,
 			authors: authors ?? [],
-			version: version ?? "",
+			version: version_text,
 			description: description ?? "",
 			options,
 			parameters,
@@ -386,7 +388,7 @@ Cli(data, _from_action, _to_action) :: {
 	##         \\An example CLI.
 	##         \\
 	##         \\Usage:
-	##         \\  example -a/--alpha NUM [options]
+	##         \\  example [options]
 	##         \\
 	##         \\Options:
 	##         \\  -v                   How verbose our logs should be.
@@ -409,7 +411,7 @@ Cli(data, _from_action, _to_action) :: {
 	##         \\Error: The argument -x was not recognized.
 	##         \\
 	##         \\Usage:
-	##         \\  example -a/--alpha NUM [options]
+	##         \\  example [options]
 	##     )
 	## ```
 	parse_or_display_message : CliParser(data), List([Utf8(Str), UnixBytes(List(U8)), WindowsU16s(List(U16))]) -> Try(data, Str)
@@ -531,28 +533,33 @@ Cli(data, _from_action, _to_action) :: {
 	## Register the `-h/--help` and `-V/--version` flags, and show the help
 	## page or the version when one of them is given.
 	check_for_help_and_version : Cli(state, from_action, to_action) -> Cli(state, from_action, to_action)
-	check_for_help_and_version = |builder| {
-		parser = builder.parser
-		new_parser = |{ args, subcommand_path }|
-			match parser({ args, subcommand_path }) {
-				ShowHelp(sp) => ShowHelp(sp)
-				ShowVersion => ShowVersion
-				other =>
-					if flag_was_passed(Base.help_option, args) {
-						ShowHelp({ subcommand_path: subcommand_path })
-					} else if flag_was_passed(Base.version_option, args) {
-						ShowVersion
-					} else {
-						other
-					}
-			}
+	check_for_help_and_version = |builder| check_for_flags(builder, True)
+}
 
-		Cli.{
-			options: builder.options.concat([Base.help_option, Base.version_option]),
-			parameters: builder.parameters,
-			subcommands: builder.subcommands,
-			parser: new_parser,
+## Register `-h/--help`, and `-V/--version` when `with_version` is true, and
+## show the help page or the version when one of them is given.
+check_for_flags : Cli(state, from_action, to_action), Bool -> Cli(state, from_action, to_action)
+check_for_flags = |builder, with_version| {
+	parser = builder.parser
+	new_parser = |{ args, subcommand_path }|
+		match parser({ args, subcommand_path }) {
+			ShowHelp(sp) => ShowHelp(sp)
+			ShowVersion => ShowVersion
+			other =>
+				if flag_was_passed(Base.help_option, args) {
+					ShowHelp({ subcommand_path: subcommand_path })
+				} else if with_version and flag_was_passed(Base.version_option, args) {
+					ShowVersion
+				} else {
+					other
+				}
 		}
+
+	Cli.{
+		options: builder.options.concat(if (with_version) [Base.help_option, Base.version_option] else [Base.help_option]),
+		parameters: builder.parameters,
+		subcommands: builder.subcommands,
+		parser: new_parser,
 	}
 }
 

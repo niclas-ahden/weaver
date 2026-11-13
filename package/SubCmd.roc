@@ -268,9 +268,8 @@ expect
 			\\  <file>  ${""}
 			\\
 			\\Options:
-			\\  -v             ${""}
-			\\  -h, --help     Show this help page.
-			\\  -V, --version  Show the version.
+			\\  -v          ${""}
+			\\  -h, --help  Show this help page.
 		)
 
 expect

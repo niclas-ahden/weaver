@@ -228,7 +228,7 @@ cases = [
 				"A first subcommand.",
 				"",
 				"${heading}Usage:${reset}",
-				"  subcommands s1 -d NUM -v/--volume NUM [options]",
+				"  subcommands s1 [options]",
 				"  subcommands s1 <COMMAND>",
 				"",
 				"${heading}Commands:${reset}",
