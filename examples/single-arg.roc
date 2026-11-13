@@ -1,32 +1,34 @@
 app [main!] {
-    pf: platform "https://github.com/roc-lang/basic-cli/releases/download/0.17.0/lZFLstMUCUvd5bjnnpYromZJXkQUrdhbva4xdBInicE.tar.br",
-    weaver: "../package/main.roc",
+	pf: platform "https://github.com/niclas-ahden/basic-cli/releases/download/0.31.0/Ff3fkK1TjYTVxMj9V21FP24ojTJXYk314Fbo1whBZ6Yf.tar.zst",
+	weaver: "../package/main.roc",
 }
 
-import pf.Arg
 import pf.Stdout
-import weaver.Opt
 import weaver.Cli
+import weaver.Opt
 
-main! = |args|
-    data =
-        Cli.parse_or_display_message(cli_parser, args, Arg.to_os_raw)
-        |> Result.on_err!(|message|
-            Stdout.line!(message)?
-            Err(Exit(1, ""))
-        )
+main! = |args| {
+	data =
+		match Cli.parse_or_display_message(cli_parser, args) {
+			Ok(parsed) => parsed
+			Err(message) => {
+				Stdout.line!(message)?
+				return Err(Exit(1))
+			}
+		}
 
-    Stdout.line!("Successfully parsed! Here's what I got:")?
-    Stdout.line!("")?
-    Stdout.line!(Inspect.to_str(data))?
+	Stdout.line!("Successfully parsed! Here's what I got:")?
+	Stdout.line!("")?
+	Stdout.line!(Str.inspect(data))?
 
-    Ok({})
+	Ok({})
+}
 
 cli_parser =
-    Opt.u64({ short: "a", long: "alpha", help: "Set the alpha level." })
-    |> Cli.map(Alpha)
-    |> Cli.finish({
-        name: "single-arg",
-        version: "v0.0.1",
-    })
-    |> Cli.assert_valid
+	Opt.u64({ short: "a", long: "alpha", help: "Set the alpha level." })
+		.map(|alpha| Alpha(alpha))
+		.finish({
+			name: "single-arg",
+			version: "v0.0.1",
+		})
+		|> Cli.assert_valid

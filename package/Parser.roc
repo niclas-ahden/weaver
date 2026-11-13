@@ -1,132 +1,124 @@
-module [parse_args, ParsedArg, ArgValue]
+import Arg
 
-import Arg exposing [Arg]
+## Split command-line arguments into short flags, short flag groups, long
+## flags and parameters, before any of them are matched to a CLI's config.
+Parser :: [].{
 
-ArgValue : Result Arg [NoValue]
+	## The value given to a long flag with `=`, as in `--name=value`.
+	ArgValue : Try(Arg, [NoValue])
 
-ParsedArg : [
-    Short Str,
-    ShortGroup { names : List Str, complete : [Complete, Partial] },
-    Long { name : Str, value : ArgValue },
-    Parameter Arg,
-]
+	## A command-line argument, sorted by its shape.
+	ParsedArg : [
+		Short(Str),
+		ShortGroup({ names : List(Str), complete : [Complete, Partial] }),
+		Long({ name : Str, value : ArgValue }),
+		Parameter(Arg),
+	]
 
+	## Sort command-line arguments by their shape.
+	##
+	## Everything after a `--` argument is a parameter, whatever it looks like.
+	## The list should not start with the program's name, so pass in what
+	## basic-cli's `main!` receives as is.
+	parse_args : List(Arg) -> List(ParsedArg)
+	parse_args = |args| {
+		var $parsed_args = []
+		var $pass_through = False
+		for arg in args {
+			if $pass_through {
+				$parsed_args = $parsed_args.append(Parameter(arg))
+			} else {
+				parsed_arg = parse_arg(arg)
+				match parsed_arg {
+					Parameter(a) if a == double_dash_arg => {
+						$pass_through = True
+					}
+					_ => {
+						$parsed_args = $parsed_args.append(parsed_arg)
+					}
+				}
+			}
+		}
+		$parsed_args
+	}
+}
+
+single_dash_arg : Arg
 single_dash_arg = Arg.from_str("-")
+
+double_dash_arg : Arg
 double_dash_arg = Arg.from_str("--")
 
-parse_args : List Arg -> List ParsedArg
-parse_args = |args|
-    starting_state = { parsed_args: [], pass_through: KeepParsing }
+parse_arg : Arg -> Parser.ParsedArg
+parse_arg = |arg| {
+	str_arg =
+		match Arg.to_str(arg) {
+			Ok(str) => str
+			Err(InvalidUtf8) => return Parameter(arg)
+		}
 
-    state_after =
-        args
-        |> List.drop_first(1)
-        |> List.walk(starting_state, |{ parsed_args, pass_through }, arg|
-            when pass_through is
-                KeepParsing ->
-                    parsed_arg = parse_arg(arg)
-                    when parsed_arg is
-                        Parameter(a) if a == double_dash_arg ->
-                            { pass_through: PassThrough, parsed_args }
+	match str_arg.split_first("-") {
+		Ok({ before: "", after }) =>
+			if after == "" {
+				Parameter(single_dash_arg)
+			} else {
+				match after.split_first("-") {
+					Ok({ before: "", after: rest }) =>
+						if rest == "" or rest.starts_with("-") {
+							Parameter(arg)
+						} else {
+							parse_long_arg(rest)
+						}
+					_ => construct_set_of_options(after)
+				}
+			}
+		_ => Parameter(arg)
+	}
+}
 
-                        _other ->
-                            { pass_through: KeepParsing, parsed_args: parsed_args |> List.append(parsed_arg) }
-
-                PassThrough ->
-                    {
-                        pass_through: PassThrough,
-                        parsed_args: parsed_args |> List.append(Parameter(arg)),
-                    })
-
-    state_after.parsed_args
-
-parse_arg : Arg -> ParsedArg
-parse_arg = |arg|
-    str_arg =
-        when Arg.to_str(arg) is
-            Ok(str) -> str
-            Err(InvalidUtf8) ->
-                return Parameter(arg)
-
-    when Str.split_first(str_arg, "-") is
-        Ok({ before: "", after }) ->
-            if after == "" then
-                Parameter(single_dash_arg)
-            else
-                when Str.split_first(after, "-") is
-                    Ok({ before: "", after: rest }) ->
-                        if rest == "" or Str.starts_with(rest, "-") then
-                            Parameter(arg)
-                        else
-                            parse_long_arg(rest)
-
-                    _other -> construct_set_of_options(after)
-
-        _other ->
-            Parameter(arg)
-
-parse_long_arg : Str -> ParsedArg
+parse_long_arg : Str -> Parser.ParsedArg
 parse_long_arg = |arg|
-    when Str.split_first(arg, "=") is
-        Ok({ before: option, after: value }) ->
-            Long({ name: option, value: Ok(Arg.from_str(value)) })
+	match arg.split_first("=") {
+		Ok({ before: option, after: value }) => Long({ name: option, value: Ok(Arg.from_str(value)) })
+		Err(_) => Long({ name: arg, value: Err(NoValue) })
+	}
 
-        _other ->
-            Long({ name: arg, value: Err(NoValue) })
+construct_set_of_options : Str -> Parser.ParsedArg
+construct_set_of_options = |combined| {
+	options = combined.to_utf8().keep_oks(|c| Str.from_utf8([c]))
 
-construct_set_of_options : Str -> ParsedArg
-construct_set_of_options = |combined|
-    options =
-        combined
-        |> Str.to_utf8
-        |> List.keep_oks(|c| Str.from_utf8([c]))
+	match options {
+		[alone] => Short(alone)
+		other => ShortGroup({ names: other, complete: Complete })
+	}
+}
 
-    when options is
-        [alone] -> Short(alone)
-        other -> ShortGroup({ names: other, complete: Complete })
+expect parse_arg(Arg.from_str("-")) == Parameter(Arg.from_str("-"))
 
-expect
-    parsed = parse_arg(Arg.from_str("-"))
+expect parse_arg(Arg.from_str("-a")) == Short("a")
 
-    parsed == Parameter(Arg.from_str("-"))
+expect parse_arg(Arg.from_str("-abc")) == ShortGroup({ names: ["a", "b", "c"], complete: Complete })
 
-expect
-    parsed = parse_arg(Arg.from_str("-a"))
+expect parse_arg(Arg.from_str("--abc")) == Long({ name: "abc", value: Err(NoValue) })
 
-    parsed == Short("a")
+expect parse_arg(Arg.from_str("--abc=xyz")) == Long({ name: "abc", value: Ok(Arg.from_str("xyz")) })
 
-expect
-    parsed = parse_arg(Arg.from_str("-abc"))
+expect parse_arg(Arg.from_str("123")) == Parameter(Arg.from_str("123"))
 
-    parsed == ShortGroup({ names: ["a", "b", "c"], complete: Complete })
+expect parse_arg(Arg.from_str("---abc")) == Parameter(Arg.from_str("---abc"))
 
-expect
-    parsed = parse_arg(Arg.from_str("--abc"))
+expect parse_arg(Arg.from_raw_arg(UnixBytes([45, 0xff]))) == Parameter(Arg.from_raw_arg(UnixBytes([45, 0xff])))
 
-    parsed == Long({ name: "abc", value: Err(NoValue) })
+expect {
+	parsed = Parser.parse_args(["-a", "123", "--passed", "-bcd", "xyz", "--", "--subject=world"].map(Arg.from_str))
 
-expect
-    parsed = parse_arg(Arg.from_str("--abc=xyz"))
-
-    parsed == Long({ name: "abc", value: Ok(Arg.from_str("xyz")) })
-
-expect
-    parsed = parse_arg(Arg.from_str("123"))
-
-    parsed == Parameter(Arg.from_str("123"))
-
-expect
-    parsed =
-        ["this-wont-show", "-a", "123", "--passed", "-bcd", "xyz", "--", "--subject=world"]
-        |> List.map(Arg.from_str)
-        |> parse_args
-
-    parsed
-    == [
-        Short("a"),
-        Parameter(Arg.from_str("123")),
-        Long({ name: "passed", value: Err(NoValue) }),
-        ShortGroup({ names: ["b", "c", "d"], complete: Complete }),
-        Parameter(Arg.from_str("xyz")),
-        Parameter(Arg.from_str("--subject=world")),
-    ]
+	parsed
+		== [
+			Short("a"),
+			Parameter(Arg.from_str("123")),
+			Long({ name: "passed", value: Err(NoValue) }),
+			ShortGroup({ names: ["b", "c", "d"], complete: Complete }),
+			Parameter(Arg.from_str("xyz")),
+			Parameter(Arg.from_str("--subject=world")),
+		]
+}

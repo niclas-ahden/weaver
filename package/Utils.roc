@@ -1,73 +1,61 @@
-module [is_kebab_case, to_upper_case]
+## Helpers for checking and changing the case of names.
+Utils :: [].{
+
+	## Whether a name is kebab-case: lowercase letters and digits joined by
+	## single dashes, starting with a letter.
+	is_kebab_case : Str -> Bool
+	is_kebab_case = |s|
+		match Str.to_utf8(s) {
+			[] => False
+			[single] => is_lower_case(single) or is_digit(single)
+			[first, .. as middle, last] => {
+				first_is_kebab = is_lower_case(first)
+				last_is_kebab = is_lower_case(last) or is_digit(last)
+				middle_is_kebab = middle.all(|char| is_lower_case(char) or is_digit(char) or char == dash_ascii_code)
+				no_double_dashes =
+					middle
+						.map2(middle.drop_first(1), |left, right| (left, right))
+						.all(|(left, right)| !(left == dash_ascii_code and right == dash_ascii_code))
+
+				first_is_kebab and last_is_kebab and middle_is_kebab and no_double_dashes
+			}
+		}
+
+	## Uppercase the ASCII letters of a string.
+	to_upper_case : Str -> Str
+	to_upper_case = |str| {
+		bytes = Str.to_utf8(str).map(
+			|c|
+				if is_lower_case(c) {
+					c - ('a' - 'A')
+				} else {
+					c
+				},
+		)
+		Str.from_utf8(bytes) ?? ""
+	}
+}
+
+dash_ascii_code : U8
+dash_ascii_code = '-'
 
 is_digit : U8 -> Bool
-is_digit = |char|
-    zero_ascii_code = 48
-    nine_ascii_code = 57
-
-    char >= zero_ascii_code and char <= nine_ascii_code
+is_digit = |char| char >= '0' and char <= '9'
 
 is_lower_case : U8 -> Bool
-is_lower_case = |char|
-    char >= 'a' and char <= 'z'
+is_lower_case = |char| char >= 'a' and char <= 'z'
 
-is_kebab_case : Str -> Bool
-is_kebab_case = |s|
-    dash_ascii_code : U8
-    dash_ascii_code = 45
+expect Str.to_utf8("19aB ").map(is_digit) == [True, True, False, False, False]
 
-    when Str.to_utf8(s) is
-        [] -> Bool.false
-        [single] -> is_lower_case(single) or is_digit(single)
-        [first, .. as middle, last] ->
-            first_is_kebab = is_lower_case(first)
-            last_is_kebab = is_lower_case(last) or is_digit(last)
-            middle_is_kebab =
-                middle
-                |> List.all(|char|
-                    is_lower_case(char) or is_digit(char) or char == dash_ascii_code)
-            no_double_dashes =
-                middle
-                |> List.map2(List.drop_first(middle, 1), Pair)
-                |> List.all(|Pair(left, right)|
-                    !(left == dash_ascii_code and right == dash_ascii_code))
+expect Str.to_utf8("aAzZ-").map(is_lower_case) == [True, False, True, False, False]
 
-            first_is_kebab and last_is_kebab and middle_is_kebab and no_double_dashes
+expect Utils.is_kebab_case("abc-def")
+expect !Utils.is_kebab_case("-abc-def")
+expect !Utils.is_kebab_case("abc-def-")
+expect !Utils.is_kebab_case("-")
+expect !Utils.is_kebab_case("")
+expect !Utils.is_kebab_case("abc--def")
 
-to_upper_case : Str -> Str
-to_upper_case = |str|
-    str
-    |> Str.to_utf8
-    |> List.map(|c|
-        if is_lower_case(c) then
-            c - ('a' - 'A')
-        else
-            c)
-    |> Str.from_utf8
-    |> Result.with_default("")
-
-expect
-    sample = "19aB "
-
-    sample
-    |> Str.to_utf8
-    |> List.map(is_digit)
-    == [Bool.true, Bool.true, Bool.false, Bool.false, Bool.false]
-
-expect
-    sample = "aAzZ-"
-
-    sample
-    |> Str.to_utf8
-    |> List.map(is_lower_case)
-    == [Bool.true, Bool.false, Bool.true, Bool.false, Bool.false]
-
-expect is_kebab_case("abc-def")
-expect is_kebab_case("-abc-def") |> Bool.not
-expect is_kebab_case("abc-def-") |> Bool.not
-expect is_kebab_case("-") |> Bool.not
-expect is_kebab_case("") |> Bool.not
-
-expect to_upper_case("abc") == "ABC"
-expect to_upper_case("ABC") == "ABC"
-expect to_upper_case("aBc00-") == "ABC00-"
+expect Utils.to_upper_case("abc") == "ABC"
+expect Utils.to_upper_case("ABC") == "ABC"
+expect Utils.to_upper_case("aBc00-") == "ABC00-"

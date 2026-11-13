@@ -6,10 +6,14 @@ An ergonomic command-line argument parser for the Roc language.
 This library aims to provide a convenient interface for parsing CLI arguments
 into structured data, in the style of Rust's [clap](https://github.com/clap-rs/clap).
 Without code generation at compile time, the closest we can get in Roc is the use of the
-[record builder syntax](https://www.roc-lang.org/examples/RecordBuilder/README.html).
+record builder syntax, `{ a: x, b: y }.Cli`.
 This allows us to build our config and parser at the same time, in a type-safe way!
 
-Read the documentation at <https://smores56.github.io/weaver/Cli/>.
+This is a port of [smores56/weaver](https://github.com/smores56/weaver) to the
+current Roc compiler. See [Changes from upstream Weaver](#changes-from-upstream-weaver)
+for what is different.
+
+Read the documentation at <https://niclas-ahden.github.io/weaver/>.
 
 ## Status
 
@@ -21,55 +25,57 @@ from another CLI parsing library that you think would fit well in Weaver's nest.
 
 ```roc
 app [main!] {
-    pf: platform "<latest from https://github.com/roc-lang/basic-cli/releases>",
-    weaver: "<latest from https://github.com/smores56/weaver/releases>",
+	pf: platform "https://github.com/niclas-ahden/basic-cli/releases/download/0.31.0/Ff3fkK1TjYTVxMj9V21FP24ojTJXYk314Fbo1whBZ6Yf.tar.zst",
+	weaver: "<latest from https://github.com/niclas-ahden/weaver/releases>",
 }
 
-import pf.Arg
 import pf.Stdout
-import weaver.Opt
 import weaver.Cli
+import weaver.Opt
 import weaver.Param
 
-main! = |args|
-    data =
-        Cli.parse_or_display_message(cli_parser, args, Arg.to_os_raw)
-        |> Result.on_err!(|message|
-            Stdout.line!(message)?
-            Err(Exit(1, ""))
-        )
+main! = |args| {
+	data =
+		match Cli.parse_or_display_message(cli_parser, args) {
+			Ok(parsed) => parsed
+			Err(message) => {
+				Stdout.line!(message)?
+				return Err(Exit(1))
+			}
+		}
 
-    Stdout.line!("Successfully parsed! Here's what I got:")?
-    Stdout.line!("")?
-    Stdout.line!(Inspect.to_str(data))?
+	Stdout.line!("Successfully parsed! Here's what I got:")?
+	Stdout.line!("")?
+	Stdout.line!(Str.inspect(data))?
 
-    Ok({})
+	Ok({})
+}
 
 cli_parser =
-    { Cli.weave <-
-        alpha: Opt.u64({ short: "a", help: "Set the alpha level." }),
-        force: Opt.flag({ short: "f", help: "Force the task to complete." }),
-        file: Param.maybe_str({ name: "file", help: "The file to process." }),
-        files: Param.str_list({ name: "files", help: "The rest of the files." }),
-    }
-    |> Cli.finish({
-        name: "basic",
-        version: "v0.1.0",
-        authors: ["Some One <some.one@mail.com>"],
-        description: "This is a basic example of what you can build with Weaver. You get safe parsing, useful error messages, and help pages all for free!",
-    })
-    |> Cli.assert_valid
+	{
+		alpha: Opt.u64({ short: "a", help: "Set the alpha level." }),
+		force: Opt.flag({ short: "f", help: "Force the task to complete." }),
+		file: Param.maybe_str({ name: "file", help: "The file to process." }),
+		files: Param.str_list({ name: "files", help: "The rest of the files." }),
+	}.Cli
+		.finish({
+			name: "basic",
+			version: "v0.0.1",
+			authors: ["Some One <some.one@mail.com>"],
+			description: "This is a basic example of what you can build with Weaver. You get safe parsing, useful error messages, and help pages all for free!",
+		})
+		|> Cli.assert_valid
 ```
 
 And here's us calling the above example from the command line:
 
 ```console
-$ roc examples/basic.roc -- file1.txt file2.txt -f -a 123
+$ roc examples/basic.roc file1.txt file2.txt -f -a 123
 Successfully parsed! Here's what I got:
 
-{alpha: 123, file: (Ok "file1.txt"), files: ["file2.txt"], force: Bool.true}
+{ alpha: 123, file: Ok("file1.txt"), files: ["file2.txt"], force: True }
 
-$ roc readme.roc -- --help
+$ roc examples/basic.roc --help
 basic v0.0.1
 Some One <some.one@mail.com>
 
@@ -87,16 +93,63 @@ Options:
   -f             Force the task to complete.
   -h, --help     Show this help page.
   -V, --version  Show the version.
+
+$ roc examples/basic.roc
+Error: Required option -a is missing.
+
+Usage:
+  basic -a NUM [options] <file> <files...>
 ```
 
 There are also some examples in the [examples](./examples) directory that are more
 feature-complete, with more to come as this library matures.
 
+## Changes from upstream Weaver
+
+The API is upstream Weaver's, with the changes the current Roc language and
+basic-cli call for:
+
+- A CLI is built with the record builder `{ a: x, b: y }.Cli` instead of
+  `{ Cli.weave <- a: x, b: y }`. The builder type is now `Cli(data, from_action, to_action)`,
+  which calls `Cli.map2` for each field. `Cli.weave` is still there, as another name for `Cli.map2`.
+  A record builder needs at least two fields, so name a single field with `.map(|alpha| { alpha: alpha })`.
+- The `Builder` module is gone. Its type is now the `Cli` type, and its functions
+  (`from_arg_parser`, `add_option`, `update_parser`, `check_for_help_and_version` and so on)
+  are members of `Cli`, since a record builder must name a type that has `map2`.
+  `Builder.GetOptionsAction` and the other action types are `Cli.GetOptionsAction` and so on,
+  and `Cli.CliParser` is the type of a finished parser.
+- `Cli.parse_or_display_message(parser, args)` takes the arguments as basic-cli's `main!`
+  receives them, `List([Utf8(Str), UnixBytes(List(U8)), WindowsU16s(List(U16))])`, without the
+  program's name. There is no third argument to convert them.
+- An `Arg` holds one of those three shapes. Two args are equal when they hold the same text.
+  The `Arg` module is now exposed, so a custom parser can use it.
+- `Result` is `Try`, so a missing optional value is `Err(NoValue)` in a `Try(a, [NoValue])`.
+- Tags are no longer functions, so a subcommand's mapper is written `mapper: |data| Foo(data)`.
+- Number parsers use the builtin `U64.from_str` and friends, and `Generate` defaults take `|{}| ...`.
+
+Behaviour that changed:
+
+- Options can no longer share a name with the options of a command above them, or with
+  `-h/--help` and `-V/--version`. Upstream Weaver documented this check but had it switched off
+  until the compiler could handle it.
+- Flags that share a short group, as in `-vf`, are all found. Upstream Weaver lost the rest of the
+  group once it found the first option in it.
+
+## Tests
+
+`./tests.roc` runs everything: the package's `expect` blocks, the CLI tests in
+`tests/cli_test.roc`, two CLIs that must fail to compile because their fields are out of
+order, and each example with several sets of arguments, comparing what they print.
+
+```console
+$ nix develop -c ./tests.roc
+```
+
 ## Roadmap
 
-Now that an initial release has happened, these are some ideas I have for future development:
+These are some ideas for future development:
 
-- [ ] Optionally set `{ group ?? Str }` per option so they are visually grouped in the help page
+- [ ] Optionally set `{ group ?: Str }` per option so they are visually grouped in the help page
 - [ ] Completion generation for popular shells (e.g. Bash, Zsh, Fish, etc.)
 - [X] Add terminal escape sequences to generated messages for prettier help/usage text formatting (currently working, but could be nicer/more configurable)
 - [ ] add convenient CLI platform wrappers (e.g. parse, or print help and exit) for use with module params
