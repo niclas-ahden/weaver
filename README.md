@@ -26,7 +26,7 @@ from another CLI parsing library that you think would fit well in Weaver's nest.
 ```roc
 app [main!] {
 	pf: platform "https://github.com/niclas-ahden/basic-cli/releases/download/0.31.0/Ff3fkK1TjYTVxMj9V21FP24ojTJXYk314Fbo1whBZ6Yf.tar.zst",
-	weaver: "<latest from https://github.com/niclas-ahden/weaver/releases>",
+	weaver: "https://github.com/niclas-ahden/weaver/releases/download/0.7.0/3sdZgJWYtJjxpDCB9XGJqKRC1XpX7ULAedqXT5AgvuJD.tar.zst",
 }
 
 import pf.Stdout

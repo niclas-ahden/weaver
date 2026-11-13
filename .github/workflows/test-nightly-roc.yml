@@ -1,7 +1,6 @@
 name: Test latest release on latest nightly Roc
 
-# Every morning, the latest published bundle on the newest Roc nightly. Green
-# moves the recommendation in that release's notes forward.
+# Every afternoon, the latest published bundle on the newest Roc nightly.
 
 on:
   schedule:
@@ -46,16 +45,6 @@ jobs:
       opts: '["dev", "size", "interpreter"]'
       ref: ${{ needs.roc-versions.outputs.release }}
       bundle-url: ${{ needs.roc-versions.outputs.bundle }}
-
-  recommend:
-    name: Recommend this Roc in the release notes
-    needs: [roc-versions, test]
-    permissions:
-      contents: write
-    uses: niclas-ahden/roc-workflows/.github/workflows/name-nightly.yml@v3
-    with:
-      release: ${{ needs.roc-versions.outputs.release }}
-      nightly: ${{ needs.roc-versions.outputs.nightly }}
 
   name-commit-range:
     name: Name the Roc commit range that broke it
